@@ -9,13 +9,24 @@ async function fetchCards() {
   try {
     status.textContent = "Loading cards...";
 
-    const res = await fetch(`${API_URL}?t=${Date.now()}`);
+    const url = new URL(API_URL);
+    url.searchParams.set("mode", "read");
+    url.searchParams.set("t", String(Date.now()));
+
+    const res = await fetch(url.toString());
     if (!res.ok) {
       throw new Error(`HTTP ${res.status}`);
     }
 
-    const data = await res.json();
-    allCards = Array.isArray(data) ? data : [];
+    const payload = await res.json();
+
+    if (Array.isArray(payload)) {
+      allCards = payload;
+    } else if (payload && payload.success && Array.isArray(payload.data)) {
+      allCards = payload.data;
+    } else {
+      throw new Error(payload.message || "Invalid read response");
+    }
 
     populateFilters();
     render();
@@ -23,7 +34,7 @@ async function fetchCards() {
     status.textContent = `${allCards.length} card variants loaded`;
   } catch (error) {
     console.error(error);
-    status.textContent = "Failed to load card data";
+    status.textContent = `Failed to load card data: ${error.message}`;
     document.getElementById("results").innerHTML =
       `<div class="empty-state">Could not load card data.</div>`;
   }
@@ -48,8 +59,8 @@ function populateFilters() {
     ownerFilter.innerHTML += `<option value="${escapeHtml(owner)}">${escapeHtml(owner)}</option>`;
   });
 
-  sets.forEach(set => {
-    setFilter.innerHTML += `<option value="${escapeHtml(set)}">${escapeHtml(set)}</option>`;
+  sets.forEach(setName => {
+    setFilter.innerHTML += `<option value="${escapeHtml(setName)}">${escapeHtml(setName)}</option>`;
   });
 
   ownerFilter.value = owners.includes(currentOwner) ? currentOwner : "All";
@@ -60,7 +71,7 @@ function render() {
   const results = document.getElementById("results");
   const search = document.getElementById("searchInput").value.toLowerCase().trim();
   const owner = document.getElementById("ownerFilter").value;
-  const set = document.getElementById("setFilter").value;
+  const setName = document.getElementById("setFilter").value;
 
   const filtered = allCards.filter(c => {
     const pokemon = String(c.Pokemon || "").toLowerCase();
@@ -75,7 +86,7 @@ function render() {
         cardNumber.includes(search) ||
         variant.includes(search)) &&
       (owner === "All" || c.Owner === owner) &&
-      (set === "All" || c.Set === set)
+      (setName === "All" || c.Set === setName)
     );
   });
 
@@ -162,7 +173,7 @@ function render() {
   }).join("");
 }
 
-async function toggleOwned(owner, set, cardNumber, variant, currentOwned, exists) {
+async function toggleOwned(owner, setName, cardNumber, variant, currentOwned, exists) {
   if (isUpdating || !exists) return;
 
   isUpdating = true;
@@ -171,9 +182,9 @@ async function toggleOwned(owner, set, cardNumber, variant, currentOwned, exists
 
   try {
     const url = new URL(API_URL);
-    url.searchParams.set("action", "update");
+    url.searchParams.set("mode", "update");
     url.searchParams.set("owner", owner);
-    url.searchParams.set("set", set);
+    url.searchParams.set("setName", setName);
     url.searchParams.set("cardNumber", cardNumber);
     url.searchParams.set("variant", variant);
     url.searchParams.set("owned", String(!currentOwned));
@@ -192,7 +203,7 @@ async function toggleOwned(owner, set, cardNumber, variant, currentOwned, exists
 
     const match = allCards.find(c =>
       c.Owner === owner &&
-      c.Set === set &&
+      c.Set === setName &&
       String(c.CardNumber) === String(cardNumber) &&
       c.Variant === variant
     );
