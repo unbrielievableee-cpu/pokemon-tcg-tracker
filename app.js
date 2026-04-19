@@ -1,6 +1,7 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbx4DKPQ9ykHaTb6AWI92A8IeV1HBp6RtxzNkjnsl3hFhonWBhAa20coEKIWRI_5vi_F/exec";
 
 let allCards = [];
+let isUpdating = false;
 
 async function fetchCards() {
   const status = document.getElementById("statusMessage");
@@ -79,23 +80,93 @@ function render() {
     return;
   }
 
-  results.innerHTML = filtered.map(c => `
-    <div class="card ${c.Owned ? "owned-true" : "owned-false"}">
-      <h3>${escapeHtml(c.Pokemon || "Unknown")}</h3>
-      <div class="card-number">#${escapeHtml(String(c.CardNumber || "-"))}</div>
+  results.innerHTML = filtered.map(c => {
+    const ownerSafe = escapeHtml(c.Owner || "");
+    const setSafe = escapeHtml(c.Set || "");
+    const cardNumberSafe = escapeHtml(String(c.CardNumber || ""));
+    const pokemonSafe = escapeHtml(c.Pokemon || "Unknown");
+    const variantSafe = escapeHtml(c.Variant || "Unknown Variant");
+    const owned = c.Owned === true;
 
-      <div class="meta-row">
-        <span class="pill">${escapeHtml(c.Variant || "Unknown Variant")}</span>
-        <span class="pill">${escapeHtml(c.Set || "Unknown Set")}</span>
+    return `
+      <div class="card ${owned ? "owned-true" : "owned-false"}">
+        <h3>${pokemonSafe}</h3>
+        <div class="card-number">#${cardNumberSafe}</div>
+
+        <div class="meta-row">
+          <span class="pill">${variantSafe}</span>
+          <span class="pill">${setSafe}</span>
+        </div>
+
+        <div class="owner-line">Owner: ${ownerSafe}</div>
+
+        <div class="status">
+          ${owned ? "Owned" : "Missing"}
+        </div>
+
+        <button
+          class="toggle-btn"
+          onclick="toggleOwned('${jsEscape(c.Owner)}','${jsEscape(c.Set)}','${jsEscape(String(c.CardNumber))}','${jsEscape(c.Variant)}', ${owned})"
+          ${isUpdating ? "disabled" : ""}
+        >
+          Mark as ${owned ? "Missing" : "Owned"}
+        </button>
       </div>
+    `;
+  }).join("");
+}
 
-      <div class="owner-line">Owner: ${escapeHtml(c.Owner || "Unknown")}</div>
+async function toggleOwned(owner, set, cardNumber, variant, currentOwned) {
+  if (isUpdating) return;
 
-      <div class="status">
-        ${c.Owned ? "Owned" : "Missing"}
-      </div>
-    </div>
-  `).join("");
+  isUpdating = true;
+  const status = document.getElementById("statusMessage");
+  status.textContent = "Saving change...";
+
+  try {
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8"
+      },
+      body: JSON.stringify({
+        owner,
+        set,
+        cardNumber,
+        variant,
+        owned: !currentOwned
+      })
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+
+    const result = await res.json();
+
+    if (!result.success) {
+      throw new Error(result.message || "Update failed");
+    }
+
+    const match = allCards.find(c =>
+      c.Owner === owner &&
+      c.Set === set &&
+      String(c.CardNumber) === String(cardNumber) &&
+      c.Variant === variant
+    );
+
+    if (match) {
+      match.Owned = !currentOwned;
+    }
+
+    render();
+    status.textContent = "Card updated";
+  } catch (error) {
+    console.error(error);
+    status.textContent = `Save failed: ${error.message}`;
+  } finally {
+    isUpdating = false;
+  }
 }
 
 function escapeHtml(value) {
@@ -105,6 +176,12 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function jsEscape(value) {
+  return String(value)
+    .replaceAll("\\", "\\\\")
+    .replaceAll("'", "\\'");
 }
 
 document.getElementById("searchInput").addEventListener("input", render);
