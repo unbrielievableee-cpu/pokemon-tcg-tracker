@@ -9,7 +9,7 @@ async function fetchCards() {
   try {
     status.textContent = "Loading cards...";
 
-    const res = await fetch(API_URL);
+    const res = await fetch(`${API_URL}?t=${Date.now()}`);
     if (!res.ok) {
       throw new Error(`HTTP ${res.status}`);
     }
@@ -150,8 +150,9 @@ async function toggleOwned(owner, set, cardNumber, variant, currentOwned) {
   status.textContent = "Saving change...";
 
   try {
-    const res = await fetch(API_URL, {
+    await fetch(API_URL, {
       method: "POST",
+      mode: "no-cors",
       headers: {
         "Content-Type": "text/plain;charset=utf-8"
       },
@@ -163,16 +164,6 @@ async function toggleOwned(owner, set, cardNumber, variant, currentOwned) {
         owned: !currentOwned
       })
     });
-
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
-    }
-
-    const result = await res.json();
-
-    if (!result.success) {
-      throw new Error(result.message || "Update failed");
-    }
 
     const match = allCards.find(c =>
       c.Owner === owner &&
@@ -187,6 +178,8 @@ async function toggleOwned(owner, set, cardNumber, variant, currentOwned) {
 
     render();
     status.textContent = "Card updated";
+
+    setTimeout(fetchCards, 1200);
   } catch (error) {
     console.error(error);
     status.textContent = `Save failed: ${error.message}`;
