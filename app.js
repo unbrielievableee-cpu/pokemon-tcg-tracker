@@ -47,10 +47,10 @@ function populateFilters() {
   const currentOwner = ownerFilter.value || "All";
   const currentSet = setFilter.value || "All";
 
-  const visibleCards = allCards.filter(c => c.Exists !== false);
+  const visibleCards = allCards.filter(card => card.Exists !== false);
 
-  const owners = [...new Set(visibleCards.map(c => c.Owner).filter(Boolean))].sort();
-  const sets = [...new Set(visibleCards.map(c => c.Set).filter(Boolean))].sort();
+  const owners = [...new Set(visibleCards.map(card => card.Owner).filter(Boolean))].sort();
+  const sets = [...new Set(visibleCards.map(card => card.Set).filter(Boolean))].sort();
 
   ownerFilter.innerHTML = `<option value="All">All Owners</option>`;
   setFilter.innerHTML = `<option value="All">All Sets</option>`;
@@ -72,12 +72,13 @@ function render() {
   const search = document.getElementById("searchInput").value.toLowerCase().trim();
   const owner = document.getElementById("ownerFilter").value;
   const setName = document.getElementById("setFilter").value;
+  const sortMode = document.getElementById("sortSelect").value;
 
-  const filtered = allCards.filter(c => {
-    const pokemon = String(c.Pokemon || "").toLowerCase();
-    const cardNumber = String(c.CardNumber || "").toLowerCase();
-    const variant = String(c.Variant || "").toLowerCase();
-    const exists = c.Exists !== false;
+  const filtered = allCards.filter(card => {
+    const pokemon = String(card.Pokemon || "").toLowerCase();
+    const cardNumber = String(card.CardNumber || "").toLowerCase();
+    const variant = String(card.Variant || "").toLowerCase();
+    const exists = card.Exists !== false;
 
     return (
       exists &&
@@ -85,8 +86,8 @@ function render() {
         pokemon.includes(search) ||
         cardNumber.includes(search) ||
         variant.includes(search)) &&
-      (owner === "All" || c.Owner === owner) &&
-      (setName === "All" || c.Set === setName)
+      (owner === "All" || card.Owner === owner) &&
+      (setName === "All" || card.Set === setName)
     );
   });
 
@@ -97,20 +98,20 @@ function render() {
 
   const grouped = {};
 
-  filtered.forEach(c => {
-    const key = `${c.Owner}|${c.Set}|${c.CardNumber}|${c.Pokemon}`;
+  filtered.forEach(card => {
+    const key = `${card.Owner}|${card.Set}|${card.CardNumber}|${card.Pokemon}`;
 
     if (!grouped[key]) {
       grouped[key] = {
-        Owner: c.Owner,
-        Set: c.Set,
-        CardNumber: c.CardNumber,
-        Pokemon: c.Pokemon,
+        Owner: card.Owner,
+        Set: card.Set,
+        CardNumber: card.CardNumber,
+        Pokemon: card.Pokemon,
         variants: []
       };
     }
 
-    grouped[key].variants.push(c);
+    grouped[key].variants.push(card);
   });
 
   const variantOrder = [
@@ -126,11 +127,21 @@ function render() {
     "BWR"
   ];
 
-  const groups = Object.values(grouped).sort((a, b) => {
-    const nameCompare = String(a.Pokemon).localeCompare(String(b.Pokemon));
-    if (nameCompare !== 0) return nameCompare;
-    return String(a.CardNumber).localeCompare(String(b.CardNumber));
-  });
+  let groups = Object.values(grouped);
+
+  if (sortMode === "alpha") {
+    groups.sort((a, b) => {
+      const nameCompare = String(a.Pokemon).localeCompare(String(b.Pokemon));
+      if (nameCompare !== 0) return nameCompare;
+      return compareCardNumbers(a.CardNumber, b.CardNumber);
+    });
+  } else {
+    groups.sort((a, b) => {
+      const numCompare = compareCardNumbers(a.CardNumber, b.CardNumber);
+      if (numCompare !== 0) return numCompare;
+      return String(a.Pokemon).localeCompare(String(b.Pokemon));
+    });
+  }
 
   results.innerHTML = groups.map(group => {
     const ownerSafe = escapeHtml(group.Owner || "");
@@ -138,23 +149,25 @@ function render() {
     const cardNumberSafe = escapeHtml(String(group.CardNumber || ""));
     const pokemonSafe = escapeHtml(group.Pokemon || "Unknown");
 
-    group.variants.sort((a, b) => variantOrder.indexOf(a.Variant) - variantOrder.indexOf(b.Variant));
+    group.variants.sort((a, b) => {
+      return variantOrder.indexOf(a.Variant) - variantOrder.indexOf(b.Variant);
+    });
 
-    const variantsHtml = group.variants.map(v => {
-      const owned = v.Owned === true;
-      const exists = v.Exists !== false;
+    const variantsHtml = group.variants.map(variantCard => {
+      const owned = variantCard.Owned === true;
+      const exists = variantCard.Exists !== false;
 
       if (!exists) {
-        return `<span class="variant-btn unavailable">${escapeHtml(v.Variant || "Unknown")}</span>`;
+        return `<span class="variant-btn unavailable">${escapeHtml(variantCard.Variant || "Unknown")}</span>`;
       }
 
       return `
         <button
           class="variant-btn ${owned ? "owned" : ""}"
-          onclick="toggleOwned('${jsEscape(v.Owner)}','${jsEscape(v.Set)}','${jsEscape(String(v.CardNumber))}','${jsEscape(v.Variant)}', ${owned}, ${exists})"
+          onclick="toggleOwned('${jsEscape(variantCard.Owner)}','${jsEscape(variantCard.Set)}','${jsEscape(String(variantCard.CardNumber))}','${jsEscape(variantCard.Variant)}', ${owned}, ${exists})"
           ${isUpdating ? "disabled" : ""}
         >
-          ${escapeHtml(v.Variant || "Unknown")}
+          ${escapeHtml(variantCard.Variant || "Unknown")}
         </button>
       `;
     }).join("");
@@ -201,11 +214,11 @@ async function toggleOwned(owner, setName, cardNumber, variant, currentOwned, ex
       throw new Error(result.message || "Update failed");
     }
 
-    const match = allCards.find(c =>
-      c.Owner === owner &&
-      c.Set === setName &&
-      String(c.CardNumber) === String(cardNumber) &&
-      c.Variant === variant
+    const match = allCards.find(card =>
+      card.Owner === owner &&
+      card.Set === setName &&
+      String(card.CardNumber) === String(cardNumber) &&
+      card.Variant === variant
     );
 
     if (match) {
@@ -222,6 +235,34 @@ async function toggleOwned(owner, setName, cardNumber, variant, currentOwned, ex
   } finally {
     isUpdating = false;
   }
+}
+
+function compareCardNumbers(a, b) {
+  const aParts = parseCardNumber(a);
+  const bParts = parseCardNumber(b);
+
+  if (aParts.main !== bParts.main) {
+    return aParts.main - bParts.main;
+  }
+
+  return aParts.total - bParts.total;
+}
+
+function parseCardNumber(value) {
+  const str = String(value || "").trim();
+  const parts = str.split("/");
+
+  if (parts.length === 2) {
+    return {
+      main: parseInt(parts[0], 10) || 0,
+      total: parseInt(parts[1], 10) || 0
+    };
+  }
+
+  return {
+    main: parseInt(str, 10) || 0,
+    total: 0
+  };
 }
 
 function escapeHtml(value) {
@@ -242,6 +283,7 @@ function jsEscape(value) {
 document.getElementById("searchInput").addEventListener("input", render);
 document.getElementById("ownerFilter").addEventListener("change", render);
 document.getElementById("setFilter").addEventListener("change", render);
+document.getElementById("sortSelect").addEventListener("change", render);
 
 fetchCards();
 setInterval(fetchCards, 30000);
