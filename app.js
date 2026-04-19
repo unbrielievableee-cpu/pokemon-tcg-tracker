@@ -36,8 +36,10 @@ function populateFilters() {
   const currentOwner = ownerFilter.value || "All";
   const currentSet = setFilter.value || "All";
 
-  const owners = [...new Set(allCards.map(c => c.Owner).filter(Boolean))].sort();
-  const sets = [...new Set(allCards.map(c => c.Set).filter(Boolean))].sort();
+  const visibleCards = allCards.filter(c => c.Exists !== false);
+
+  const owners = [...new Set(visibleCards.map(c => c.Owner).filter(Boolean))].sort();
+  const sets = [...new Set(visibleCards.map(c => c.Set).filter(Boolean))].sort();
 
   ownerFilter.innerHTML = `<option value="All">All Owners</option>`;
   setFilter.innerHTML = `<option value="All">All Sets</option>`;
@@ -64,8 +66,10 @@ function render() {
     const pokemon = String(c.Pokemon || "").toLowerCase();
     const cardNumber = String(c.CardNumber || "").toLowerCase();
     const variant = String(c.Variant || "").toLowerCase();
+    const exists = c.Exists !== false;
 
     return (
+      exists &&
       (!search ||
         pokemon.includes(search) ||
         cardNumber.includes(search) ||
@@ -98,6 +102,19 @@ function render() {
     grouped[key].variants.push(c);
   });
 
+  const variantOrder = [
+    "Normal",
+    "Holo",
+    "Rev Holo",
+    "Poke BP",
+    "Master BP",
+    "DR Holo",
+    "IR",
+    "UR",
+    "SIR",
+    "BWR"
+  ];
+
   const groups = Object.values(grouped).sort((a, b) => {
     const nameCompare = String(a.Pokemon).localeCompare(String(b.Pokemon));
     if (nameCompare !== 0) return nameCompare;
@@ -110,13 +127,26 @@ function render() {
     const cardNumberSafe = escapeHtml(String(group.CardNumber || ""));
     const pokemonSafe = escapeHtml(group.Pokemon || "Unknown");
 
+    group.variants.sort((a, b) => {
+      return variantOrder.indexOf(a.Variant) - variantOrder.indexOf(b.Variant);
+    });
+
     const variantsHtml = group.variants.map(v => {
       const owned = v.Owned === true;
+      const exists = v.Exists !== false;
+
+      if (!exists) {
+        return `
+          <span class="variant-btn unavailable" title="This variant does not exist">
+            ${escapeHtml(v.Variant || "Unknown")}
+          </span>
+        `;
+      }
 
       return `
         <button
           class="variant-btn ${owned ? "owned" : ""}"
-          onclick="toggleOwned('${jsEscape(v.Owner)}','${jsEscape(v.Set)}','${jsEscape(String(v.CardNumber))}','${jsEscape(v.Variant)}', ${owned})"
+          onclick="toggleOwned('${jsEscape(v.Owner)}','${jsEscape(v.Set)}','${jsEscape(String(v.CardNumber))}','${jsEscape(v.Variant)}', ${owned}, ${exists})"
           ${isUpdating ? "disabled" : ""}
           title="${owned ? "Click to mark missing" : "Click to mark owned"}"
         >
@@ -142,8 +172,8 @@ function render() {
   }).join("");
 }
 
-async function toggleOwned(owner, set, cardNumber, variant, currentOwned) {
-  if (isUpdating) return;
+async function toggleOwned(owner, set, cardNumber, variant, currentOwned, exists) {
+  if (isUpdating || !exists) return;
 
   isUpdating = true;
   const status = document.getElementById("statusMessage");
