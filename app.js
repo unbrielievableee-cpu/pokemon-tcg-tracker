@@ -127,20 +127,14 @@ function render() {
     const cardNumberSafe = escapeHtml(String(group.CardNumber || ""));
     const pokemonSafe = escapeHtml(group.Pokemon || "Unknown");
 
-    group.variants.sort((a, b) => {
-      return variantOrder.indexOf(a.Variant) - variantOrder.indexOf(b.Variant);
-    });
+    group.variants.sort((a, b) => variantOrder.indexOf(a.Variant) - variantOrder.indexOf(b.Variant));
 
     const variantsHtml = group.variants.map(v => {
       const owned = v.Owned === true;
       const exists = v.Exists !== false;
 
       if (!exists) {
-        return `
-          <span class="variant-btn unavailable" title="This variant does not exist">
-            ${escapeHtml(v.Variant || "Unknown")}
-          </span>
-        `;
+        return `<span class="variant-btn unavailable">${escapeHtml(v.Variant || "Unknown")}</span>`;
       }
 
       return `
@@ -148,7 +142,6 @@ function render() {
           class="variant-btn ${owned ? "owned" : ""}"
           onclick="toggleOwned('${jsEscape(v.Owner)}','${jsEscape(v.Set)}','${jsEscape(String(v.CardNumber))}','${jsEscape(v.Variant)}', ${owned}, ${exists})"
           ${isUpdating ? "disabled" : ""}
-          title="${owned ? "Click to mark missing" : "Click to mark owned"}"
         >
           ${escapeHtml(v.Variant || "Unknown")}
         </button>
@@ -163,10 +156,7 @@ function render() {
             <div class="sub">#${cardNumberSafe} • ${setSafe} • ${ownerSafe}</div>
           </div>
         </div>
-
-        <div class="variant-row">
-          ${variantsHtml}
-        </div>
+        <div class="variant-row">${variantsHtml}</div>
       </div>
     `;
   }).join("");
@@ -180,20 +170,25 @@ async function toggleOwned(owner, set, cardNumber, variant, currentOwned, exists
   status.textContent = "Saving change...";
 
   try {
-    await fetch(API_URL, {
-      method: "POST",
-      mode: "no-cors",
-      headers: {
-        "Content-Type": "text/plain;charset=utf-8"
-      },
-      body: JSON.stringify({
-        owner,
-        set,
-        cardNumber,
-        variant,
-        owned: !currentOwned
-      })
-    });
+    const url = new URL(API_URL);
+    url.searchParams.set("action", "update");
+    url.searchParams.set("owner", owner);
+    url.searchParams.set("set", set);
+    url.searchParams.set("cardNumber", cardNumber);
+    url.searchParams.set("variant", variant);
+    url.searchParams.set("owned", String(!currentOwned));
+    url.searchParams.set("t", String(Date.now()));
+
+    const res = await fetch(url.toString());
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+
+    const result = await res.json();
+
+    if (!result.success) {
+      throw new Error(result.message || "Update failed");
+    }
 
     const match = allCards.find(c =>
       c.Owner === owner &&
@@ -209,7 +204,7 @@ async function toggleOwned(owner, set, cardNumber, variant, currentOwned, exists
     render();
     status.textContent = "Card updated";
 
-    setTimeout(fetchCards, 1200);
+    setTimeout(fetchCards, 500);
   } catch (error) {
     console.error(error);
     status.textContent = `Save failed: ${error.message}`;
