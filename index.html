@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pokemon TCG Tracker</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>Pokemon TCG Tracker</h1>
+    <input type="text" id="searchInput" placeholder="Search Pokemon..." />
+    <select id="ownerFilter">
+      <option value="All">All Owners</option>
+    </select>
+    <select id="setFilter">
+      <option value="All">All Sets</option>
+    </select>
+  </header>
+
+  <main>
+    <div id="statusMessage">Loading cards...</div>
+    <div id="results" class="results"></div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
