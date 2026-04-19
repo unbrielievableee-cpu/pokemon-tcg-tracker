@@ -80,37 +80,63 @@ function render() {
     return;
   }
 
-  results.innerHTML = filtered.map(c => {
-    const ownerSafe = escapeHtml(c.Owner || "");
-    const setSafe = escapeHtml(c.Set || "");
-    const cardNumberSafe = escapeHtml(String(c.CardNumber || ""));
-    const pokemonSafe = escapeHtml(c.Pokemon || "Unknown");
-    const variantSafe = escapeHtml(c.Variant || "Unknown Variant");
-    const owned = c.Owned === true;
+  const grouped = {};
+
+  filtered.forEach(c => {
+    const key = `${c.Owner}|${c.Set}|${c.CardNumber}|${c.Pokemon}`;
+
+    if (!grouped[key]) {
+      grouped[key] = {
+        Owner: c.Owner,
+        Set: c.Set,
+        CardNumber: c.CardNumber,
+        Pokemon: c.Pokemon,
+        variants: []
+      };
+    }
+
+    grouped[key].variants.push(c);
+  });
+
+  const groups = Object.values(grouped).sort((a, b) => {
+    const nameCompare = String(a.Pokemon).localeCompare(String(b.Pokemon));
+    if (nameCompare !== 0) return nameCompare;
+    return String(a.CardNumber).localeCompare(String(b.CardNumber));
+  });
+
+  results.innerHTML = groups.map(group => {
+    const ownerSafe = escapeHtml(group.Owner || "");
+    const setSafe = escapeHtml(group.Set || "");
+    const cardNumberSafe = escapeHtml(String(group.CardNumber || ""));
+    const pokemonSafe = escapeHtml(group.Pokemon || "Unknown");
+
+    const variantsHtml = group.variants.map(v => {
+      const owned = v.Owned === true;
+
+      return `
+        <button
+          class="variant-btn ${owned ? "owned" : ""}"
+          onclick="toggleOwned('${jsEscape(v.Owner)}','${jsEscape(v.Set)}','${jsEscape(String(v.CardNumber))}','${jsEscape(v.Variant)}', ${owned})"
+          ${isUpdating ? "disabled" : ""}
+          title="${owned ? "Click to mark missing" : "Click to mark owned"}"
+        >
+          ${escapeHtml(v.Variant || "Unknown")}
+        </button>
+      `;
+    }).join("");
 
     return `
-      <div class="card ${owned ? "owned-true" : "owned-false"}">
-        <h3>${pokemonSafe}</h3>
-        <div class="card-number">#${cardNumberSafe}</div>
-
-        <div class="meta-row">
-          <span class="pill">${variantSafe}</span>
-          <span class="pill">${setSafe}</span>
+      <div class="row-card">
+        <div class="row-header">
+          <div>
+            <div class="pokemon-name">${pokemonSafe}</div>
+            <div class="sub">#${cardNumberSafe} • ${setSafe} • ${ownerSafe}</div>
+          </div>
         </div>
 
-        <div class="owner-line">Owner: ${ownerSafe}</div>
-
-        <div class="status">
-          ${owned ? "Owned" : "Missing"}
+        <div class="variant-row">
+          ${variantsHtml}
         </div>
-
-        <button
-          class="toggle-btn"
-          onclick="toggleOwned('${jsEscape(c.Owner)}','${jsEscape(c.Set)}','${jsEscape(String(c.CardNumber))}','${jsEscape(c.Variant)}', ${owned})"
-          ${isUpdating ? "disabled" : ""}
-        >
-          Mark as ${owned ? "Missing" : "Owned"}
-        </button>
       </div>
     `;
   }).join("");
