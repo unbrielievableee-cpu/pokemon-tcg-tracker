@@ -135,6 +135,28 @@ function render() {
       if (nameCompare !== 0) return nameCompare;
       return compareCardNumbers(a.CardNumber, b.CardNumber);
     });
+  } else if (sortMode === "number") {
+    groups.sort((a, b) => {
+      const numCompare = compareCardNumbers(a.CardNumber, b.CardNumber);
+      if (numCompare !== 0) return numCompare;
+      return String(a.Pokemon).localeCompare(String(b.Pokemon));
+    });
+  } else if (sortMode.startsWith("missing-")) {
+    const targetVariant = sortModeToVariant(sortMode);
+
+    groups.sort((a, b) => {
+      const aMissing = hasMissingVariant(a.variants, targetVariant) ? 1 : 0;
+      const bMissing = hasMissingVariant(b.variants, targetVariant) ? 1 : 0;
+
+      if (aMissing !== bMissing) {
+        return bMissing - aMissing;
+      }
+
+      const numCompare = compareCardNumbers(a.CardNumber, b.CardNumber);
+      if (numCompare !== 0) return numCompare;
+
+      return String(a.Pokemon).localeCompare(String(b.Pokemon));
+    });
   } else {
     groups.sort((a, b) => {
       const numCompare = compareCardNumbers(a.CardNumber, b.CardNumber);
@@ -163,7 +185,7 @@ function render() {
 
       return `
         <button
-          class="variant-btn ${owned ? "owned" : ""}"
+          class="variant-btn ${owned ? "owned" : "missing"}"
           onclick="toggleOwned('${jsEscape(variantCard.Owner)}','${jsEscape(variantCard.Set)}','${jsEscape(String(variantCard.CardNumber))}','${jsEscape(variantCard.Variant)}', ${owned}, ${exists})"
           ${isUpdating ? "disabled" : ""}
         >
@@ -184,6 +206,33 @@ function render() {
       </div>
     `;
   }).join("");
+}
+
+function hasMissingVariant(variants, targetVariant) {
+  return variants.some(variantCard => {
+    return (
+      variantCard.Exists !== false &&
+      variantCard.Variant === targetVariant &&
+      variantCard.Owned !== true
+    );
+  });
+}
+
+function sortModeToVariant(sortMode) {
+  const map = {
+    "missing-normal": "Normal",
+    "missing-holo": "Holo",
+    "missing-rev-holo": "Rev Holo",
+    "missing-poke-bp": "Poke BP",
+    "missing-master-bp": "Master BP",
+    "missing-dr-holo": "DR Holo",
+    "missing-ir": "IR",
+    "missing-ur": "UR",
+    "missing-sir": "SIR",
+    "missing-bwr": "BWR"
+  };
+
+  return map[sortMode] || "";
 }
 
 async function toggleOwned(owner, setName, cardNumber, variant, currentOwned, exists) {
