@@ -26,7 +26,7 @@ body {
   top: 0;
   z-index: 20;
   display: grid;
-  grid-template-columns: 1.2fr 1fr 170px 170px 220px;
+  grid-template-columns: 1.1fr 1fr 160px 160px 190px 160px;
   gap: 14px;
   align-items: center;
   padding: 18px 24px;
@@ -141,6 +141,11 @@ main {
   background: rgba(239, 68, 68, 0.14);
   border-color: rgba(239, 68, 68, 0.3);
   color: #fecaca;
+}
+
+.variant-btn.target-missing {
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.5);
+  border-color: rgba(251, 191, 36, 0.7);
 }
 
 .variant-btn.unavailable {
