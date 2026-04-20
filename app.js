@@ -72,9 +72,10 @@ function render() {
   const search = document.getElementById("searchInput").value.toLowerCase().trim();
   const owner = document.getElementById("ownerFilter").value;
   const setName = document.getElementById("setFilter").value;
+  const missingFilter = document.getElementById("missingFilter").value;
   const sortMode = document.getElementById("sortSelect").value;
 
-  const filtered = allCards.filter(card => {
+  const visibleCards = allCards.filter(card => {
     const pokemon = String(card.Pokemon || "").toLowerCase();
     const cardNumber = String(card.CardNumber || "").toLowerCase();
     const variant = String(card.Variant || "").toLowerCase();
@@ -91,14 +92,9 @@ function render() {
     );
   });
 
-  if (!filtered.length) {
-    results.innerHTML = `<div class="empty-state">No matching cards found.</div>`;
-    return;
-  }
-
   const grouped = {};
 
-  filtered.forEach(card => {
+  visibleCards.forEach(card => {
     const key = `${card.Owner}|${card.Set}|${card.CardNumber}|${card.Pokemon}`;
 
     if (!grouped[key]) {
@@ -129,33 +125,23 @@ function render() {
 
   let groups = Object.values(grouped);
 
+  // Actual missing filter, not fake sorting
+  if (missingFilter !== "All") {
+    groups = groups.filter(group => {
+      return hasMissingVariant(group.variants, missingFilter);
+    });
+  }
+
+  if (!groups.length) {
+    results.innerHTML = `<div class="empty-state">No matching cards found.</div>`;
+    return;
+  }
+
   if (sortMode === "alpha") {
     groups.sort((a, b) => {
       const nameCompare = String(a.Pokemon).localeCompare(String(b.Pokemon));
       if (nameCompare !== 0) return nameCompare;
       return compareCardNumbers(a.CardNumber, b.CardNumber);
-    });
-  } else if (sortMode === "number") {
-    groups.sort((a, b) => {
-      const numCompare = compareCardNumbers(a.CardNumber, b.CardNumber);
-      if (numCompare !== 0) return numCompare;
-      return String(a.Pokemon).localeCompare(String(b.Pokemon));
-    });
-  } else if (sortMode.startsWith("missing-")) {
-    const targetVariant = sortModeToVariant(sortMode);
-
-    groups.sort((a, b) => {
-      const aMissing = hasMissingVariant(a.variants, targetVariant) ? 1 : 0;
-      const bMissing = hasMissingVariant(b.variants, targetVariant) ? 1 : 0;
-
-      if (aMissing !== bMissing) {
-        return bMissing - aMissing;
-      }
-
-      const numCompare = compareCardNumbers(a.CardNumber, b.CardNumber);
-      if (numCompare !== 0) return numCompare;
-
-      return String(a.Pokemon).localeCompare(String(b.Pokemon));
     });
   } else {
     groups.sort((a, b) => {
@@ -178,6 +164,10 @@ function render() {
     const variantsHtml = group.variants.map(variantCard => {
       const owned = variantCard.Owned === true;
       const exists = variantCard.Exists !== false;
+      const isTargetMissing = missingFilter !== "All" &&
+        variantCard.Variant === missingFilter &&
+        exists &&
+        !owned;
 
       if (!exists) {
         return `<span class="variant-btn unavailable">${escapeHtml(variantCard.Variant || "Unknown")}</span>`;
@@ -185,7 +175,7 @@ function render() {
 
       return `
         <button
-          class="variant-btn ${owned ? "owned" : "missing"}"
+          class="variant-btn ${owned ? "owned" : "missing"} ${isTargetMissing ? "target-missing" : ""}"
           onclick="toggleOwned('${jsEscape(variantCard.Owner)}','${jsEscape(variantCard.Set)}','${jsEscape(String(variantCard.CardNumber))}','${jsEscape(variantCard.Variant)}', ${owned}, ${exists})"
           ${isUpdating ? "disabled" : ""}
         >
@@ -216,23 +206,6 @@ function hasMissingVariant(variants, targetVariant) {
       variantCard.Owned !== true
     );
   });
-}
-
-function sortModeToVariant(sortMode) {
-  const map = {
-    "missing-normal": "Normal",
-    "missing-holo": "Holo",
-    "missing-rev-holo": "Rev Holo",
-    "missing-poke-bp": "Poke BP",
-    "missing-master-bp": "Master BP",
-    "missing-dr-holo": "DR Holo",
-    "missing-ir": "IR",
-    "missing-ur": "UR",
-    "missing-sir": "SIR",
-    "missing-bwr": "BWR"
-  };
-
-  return map[sortMode] || "";
 }
 
 async function toggleOwned(owner, setName, cardNumber, variant, currentOwned, exists) {
@@ -332,6 +305,7 @@ function jsEscape(value) {
 document.getElementById("searchInput").addEventListener("input", render);
 document.getElementById("ownerFilter").addEventListener("change", render);
 document.getElementById("setFilter").addEventListener("change", render);
+document.getElementById("missingFilter").addEventListener("change", render);
 document.getElementById("sortSelect").addEventListener("change", render);
 
 fetchCards();
