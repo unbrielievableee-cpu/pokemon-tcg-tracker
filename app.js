@@ -299,21 +299,8 @@ async function toggleOwned(owner, setName, cardNumber, variant, currentOwned, ex
       throw new Error(result.message || "Update failed");
     }
 
-    const match = allCards.find(card =>
-      card.Owner === owner &&
-      card.Set === setName &&
-      String(card.CardNumber) === String(cardNumber) &&
-      card.Variant === variant
-    );
-
-    if (match) {
-      match.Owned = !currentOwned;
-    }
-
-    render();
+    await fetchCards();
     status.textContent = "Card updated";
-
-    setTimeout(fetchCards, 500);
   } catch (error) {
     console.error(error);
     status.textContent = `Save failed: ${error.message}`;
@@ -378,4 +365,3 @@ document.getElementById("missingFilter").addEventListener("change", render);
 document.getElementById("sortSelect").addEventListener("change", render);
 
 fetchCards();
-setInterval(fetchCards, 30000);
