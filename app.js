@@ -1,7 +1,9 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbx4DKPQ9ykHaTb6AWI92A8IeV1HBp6RtxzNkjnsl3hFhonWBhAa20coEKIWRI_5vi_F/exec";
 
 let allCards = [];
-let isUpdating = false;
+let pendingUpdates = new Map();
+let saveTimer = null;
+let isBatchSaving = false;
 
 async function fetchCards() {
   const status = document.getElementById("statusMessage");
@@ -169,7 +171,11 @@ function render() {
 
   const cardCount = groups.length;
   const variantCount = groups.reduce((sum, group) => sum + group.variants.length, 0);
-  status.textContent = `${cardCount} cards (${variantCount} variants)`;
+  const pendingCount = pendingUpdates.size;
+
+  status.textContent = pendingCount
+    ? `${cardCount} cards (${variantCount} variants) • ${pendingCount} pending save${pendingCount === 1 ? "" : "s"}`
+    : `${cardCount} cards (${variantCount} variants)`;
 
   if (!groups.length) {
     results.innerHTML = `<div class="empty-state">No matching cards found.</div>`;
@@ -197,6 +203,15 @@ function render() {
     const variantsHtml = group.variants.map(variantCard => {
       const owned = variantCard.Owned === true;
       const exists = variantCard.Exists !== false;
+      const key = makeUpdateKey(
+        variantCard.Owner,
+        variantCard.Set,
+        variantCard.CardNumber,
+        variantCard.Variant
+      );
+
+      const isPending = pendingUpdates.has(key);
+
       const isTargetMissing =
         missingFilter !== "All" &&
         variantCard.Variant === missingFilter &&
@@ -209,11 +224,10 @@ function render() {
 
       return `
         <button
-          class="variant-btn ${owned ? "owned" : "missing"} ${isTargetMissing ? "target-missing" : ""}"
-          onclick="toggleOwned('${jsEscape(variantCard.Owner)}','${jsEscape(variantCard.Set)}','${jsEscape(String(variantCard.CardNumber))}','${jsEscape(variantCard.Variant)}', ${owned}, ${exists})"
-          ${isUpdating ? "disabled" : ""}
+          class="variant-btn ${owned ? "owned" : "missing"} ${isTargetMissing ? "target-missing" : ""} ${isPending ? "pending" : ""}"
+          onclick="queueToggle('${jsEscape(variantCard.Owner)}','${jsEscape(variantCard.Set)}','${jsEscape(String(variantCard.CardNumber))}','${jsEscape(variantCard.Variant)}', ${owned}, ${exists})"
         >
-          ${escapeHtml(variantCard.Variant || "Unknown")}
+          ${escapeHtml(variantCard.Variant || "Unknown")}${isPending ? " •" : ""}
         </button>
       `;
     }).join("");
@@ -230,6 +244,89 @@ function render() {
       </div>
     `;
   }).join("");
+}
+
+function queueToggle(owner, setName, cardNumber, variant, currentOwned, exists) {
+  if (!exists) return;
+
+  const key = makeUpdateKey(owner, setName, cardNumber, variant);
+
+  const match = allCards.find(card =>
+    card.Owner === owner &&
+    card.Set === setName &&
+    String(card.CardNumber) === String(cardNumber) &&
+    card.Variant === variant
+  );
+
+  if (!match) return;
+
+  const newOwned = !match.Owned;
+
+  match.Owned = newOwned;
+
+  pendingUpdates.set(key, {
+    owner,
+    setName,
+    cardNumber,
+    variant,
+    owned: newOwned
+  });
+
+  render();
+  scheduleBatchSave();
+}
+
+function scheduleBatchSave() {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+  }
+
+  saveTimer = setTimeout(savePendingUpdates, 600);
+}
+
+async function savePendingUpdates() {
+  if (isBatchSaving || pendingUpdates.size === 0) return;
+
+  isBatchSaving = true;
+  const status = document.getElementById("statusMessage");
+
+  const updates = Array.from(pendingUpdates.values());
+  pendingUpdates.clear();
+
+  render();
+  status.textContent = `Saving ${updates.length} update${updates.length === 1 ? "" : "s"}...`;
+
+  try {
+    const url = new URL(API_URL);
+    url.searchParams.set("mode", "batchupdate");
+    url.searchParams.set("updates", encodeURIComponent(JSON.stringify(updates)));
+    url.searchParams.set("t", String(Date.now()));
+
+    const res = await fetch(url.toString());
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const result = await res.json();
+
+    if (!result.success) {
+      console.error(result);
+      throw new Error(result.message || "Batch update failed");
+    }
+
+    status.textContent = result.message || "Updates saved";
+
+    await fetchCards();
+  } catch (error) {
+    console.error(error);
+    status.textContent = `Save failed: ${error.message}. Refreshing...`;
+
+    await fetchCards();
+  } finally {
+    isBatchSaving = false;
+
+    if (pendingUpdates.size > 0) {
+      scheduleBatchSave();
+    }
+  }
 }
 
 function getVariantOrderForSet(setName) {
@@ -273,40 +370,8 @@ function hasMissingVariant(variants, targetVariant) {
   });
 }
 
-async function toggleOwned(owner, setName, cardNumber, variant, currentOwned, exists) {
-  if (isUpdating || !exists) return;
-
-  isUpdating = true;
-  const status = document.getElementById("statusMessage");
-  status.textContent = "Saving change...";
-
-  try {
-    const url = new URL(API_URL);
-    url.searchParams.set("mode", "update");
-    url.searchParams.set("owner", owner);
-    url.searchParams.set("setName", setName);
-    url.searchParams.set("cardNumber", cardNumber);
-    url.searchParams.set("variant", variant);
-    url.searchParams.set("owned", String(!currentOwned));
-    url.searchParams.set("t", String(Date.now()));
-
-    const res = await fetch(url.toString());
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-    const result = await res.json();
-
-    if (!result.success) {
-      throw new Error(result.message || "Update failed");
-    }
-
-    await fetchCards();
-    status.textContent = "Card updated";
-  } catch (error) {
-    console.error(error);
-    status.textContent = `Save failed: ${error.message}`;
-  } finally {
-    isUpdating = false;
-  }
+function makeUpdateKey(owner, setName, cardNumber, variant) {
+  return `${owner}|${setName}|${cardNumber}|${variant}`;
 }
 
 function compareCardNumbers(a, b) {
