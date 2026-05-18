@@ -4,7 +4,6 @@ const OWNER = "Brie";
 
 let allCards = [];
 let pendingUpdates = new Map();
-let saveTimer = null;
 let isBatchSaving = false;
 
 async function fetchCards() {
@@ -156,6 +155,8 @@ function render() {
     });
   }
 
+  updateSaveButton();
+
   const cardCount = groups.length;
   const variantCount = groups.reduce((sum, group) => sum + group.variants.length, 0);
   const ownedCount = visibleCards.filter(card => card.Owned === true).length;
@@ -163,7 +164,7 @@ function render() {
   const pendingCount = pendingUpdates.size;
 
   status.textContent = pendingCount
-    ? `${cardCount} cards (${ownedCount} of ${totalCount} variants owned) • ${pendingCount} pending save${pendingCount === 1 ? "" : "s"}`
+    ? `${cardCount} cards (${ownedCount} of ${totalCount} variants owned) • ${pendingCount} unsaved change${pendingCount === 1 ? "" : "s"}`
     : `${cardCount} cards (${ownedCount} of ${totalCount} variants owned)`;
 
   if (!groups.length) {
@@ -252,7 +253,7 @@ function queueToggle(setName, cardNumber, variant) {
     card.Variant === variant
   );
 
-  if (!match || match.Exists === false) return;
+  if (!match || match.Exists === false || isBatchSaving) return;
 
   const key = makeUpdateKey(OWNER, setName, cardNumber, variant);
   const newOwned = !match.Owned;
@@ -268,27 +269,17 @@ function queueToggle(setName, cardNumber, variant) {
   });
 
   render();
-  scheduleBatchSave();
-}
-
-function scheduleBatchSave() {
-  if (saveTimer) {
-    clearTimeout(saveTimer);
-  }
-
-  saveTimer = setTimeout(savePendingUpdates, 600);
 }
 
 async function savePendingUpdates() {
   if (isBatchSaving || pendingUpdates.size === 0) return;
 
   isBatchSaving = true;
+  updateSaveButton();
+
   const status = document.getElementById("statusMessage");
-
   const updates = Array.from(pendingUpdates.values());
-  pendingUpdates.clear();
 
-  render();
   status.textContent = `Saving ${updates.length} update${updates.length === 1 ? "" : "s"}...`;
 
   try {
@@ -307,21 +298,41 @@ async function savePendingUpdates() {
       throw new Error(result.message || "Batch update failed");
     }
 
-    status.textContent = result.message || "Updates saved";
+    pendingUpdates.clear();
+
+    status.textContent = result.message || "Changes saved";
 
     await fetchCards();
   } catch (error) {
     console.error(error);
-    status.textContent = `Save failed: ${error.message}. Refreshing...`;
-
-    await fetchCards();
+    status.textContent = `Save failed: ${error.message}`;
   } finally {
     isBatchSaving = false;
-
-    if (pendingUpdates.size > 0) {
-      scheduleBatchSave();
-    }
+    updateSaveButton();
+    render();
   }
+}
+
+function updateSaveButton() {
+  const saveButton = document.getElementById("saveButton");
+  if (!saveButton) return;
+
+  const count = pendingUpdates.size;
+
+  if (isBatchSaving) {
+    saveButton.disabled = true;
+    saveButton.textContent = "Saving...";
+    return;
+  }
+
+  if (count === 0) {
+    saveButton.disabled = true;
+    saveButton.textContent = "Save Changes";
+    return;
+  }
+
+  saveButton.disabled = false;
+  saveButton.textContent = `Save ${count} Change${count === 1 ? "" : "s"}`;
 }
 
 function getVariantOrderForSet(setName) {
@@ -418,5 +429,6 @@ document.getElementById("setFilter").addEventListener("change", () => {
 
 document.getElementById("missingFilter").addEventListener("change", render);
 document.getElementById("sortSelect").addEventListener("change", render);
+document.getElementById("saveButton").addEventListener("click", savePendingUpdates);
 
 fetchCards();
