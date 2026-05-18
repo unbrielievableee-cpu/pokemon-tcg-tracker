@@ -1,5 +1,7 @@
 const API_URL = "https://script.google.com/macros/s/AKfycbx4DKPQ9ykHaTb6AWI92A8IeV1HBp6RtxzNkjnsl3hFhonWBhAa20coEKIWRI_5vi_F/exec";
 
+const OWNER = "Brie";
+
 let allCards = [];
 let pendingUpdates = new Map();
 let saveTimer = null;
@@ -21,14 +23,14 @@ async function fetchCards() {
     const payload = await res.json();
 
     if (Array.isArray(payload)) {
-      allCards = payload;
+      allCards = payload.filter(card => card.Owner === OWNER);
     } else if (payload && payload.success && Array.isArray(payload.data)) {
-      allCards = payload.data;
+      allCards = payload.data.filter(card => card.Owner === OWNER);
     } else {
       throw new Error(payload.message || "Invalid read response");
     }
 
-    populateOwnerAndSetFilters();
+    populateSetFilter();
     populateMissingFilter();
     render();
   } catch (error) {
@@ -39,43 +41,30 @@ async function fetchCards() {
   }
 }
 
-function populateOwnerAndSetFilters() {
-  const ownerFilter = document.getElementById("ownerFilter");
+function populateSetFilter() {
   const setFilter = document.getElementById("setFilter");
-
-  const currentOwner = ownerFilter.value || "All";
   const currentSet = setFilter.value || "All";
 
   const visibleCards = allCards.filter(card => card.Exists !== false);
-
-  const owners = [...new Set(visibleCards.map(card => card.Owner).filter(Boolean))].sort();
   const sets = [...new Set(visibleCards.map(card => card.Set).filter(Boolean))].sort();
 
-  ownerFilter.innerHTML = `<option value="All">All Owners</option>`;
   setFilter.innerHTML = `<option value="All">All Sets</option>`;
-
-  owners.forEach(owner => {
-    ownerFilter.innerHTML += `<option value="${escapeHtml(owner)}">${escapeHtml(owner)}</option>`;
-  });
 
   sets.forEach(setName => {
     setFilter.innerHTML += `<option value="${escapeHtml(setName)}">${escapeHtml(setName)}</option>`;
   });
 
-  ownerFilter.value = owners.includes(currentOwner) ? currentOwner : "All";
   setFilter.value = sets.includes(currentSet) ? currentSet : "All";
 }
 
 function populateMissingFilter() {
   const missingFilter = document.getElementById("missingFilter");
-  const owner = document.getElementById("ownerFilter").value;
   const setName = document.getElementById("setFilter").value;
   const currentMissing = missingFilter.value || "All";
 
   const cardsForContext = allCards.filter(card => {
     return (
       card.Exists !== false &&
-      (owner === "All" || card.Owner === owner) &&
       (setName === "All" || card.Set === setName)
     );
   });
@@ -108,7 +97,6 @@ function render() {
   const status = document.getElementById("statusMessage");
 
   const search = document.getElementById("searchInput").value.toLowerCase().trim();
-  const owner = document.getElementById("ownerFilter").value;
   const setName = document.getElementById("setFilter").value;
   const missingFilter = document.getElementById("missingFilter").value;
   const sortMode = document.getElementById("sortSelect").value;
@@ -126,7 +114,6 @@ function render() {
         (isNumberSearch
           ? cardNumber.startsWith(search)
           : pokemon.includes(search) || variant.includes(search))) &&
-      (owner === "All" || card.Owner === owner) &&
       (setName === "All" || card.Set === setName)
     );
   });
@@ -134,7 +121,7 @@ function render() {
   const grouped = {};
 
   visibleCards.forEach(card => {
-    const key = `${card.Owner}|${card.Set}|${card.CardNumber}|${card.Pokemon}`;
+    const key = `${card.Set}|${card.CardNumber}|${card.Pokemon}`;
 
     if (!grouped[key]) {
       grouped[key] = {
@@ -171,11 +158,13 @@ function render() {
 
   const cardCount = groups.length;
   const variantCount = groups.reduce((sum, group) => sum + group.variants.length, 0);
+  const ownedCount = visibleCards.filter(card => card.Owned === true).length;
+  const totalCount = visibleCards.length;
   const pendingCount = pendingUpdates.size;
 
   status.textContent = pendingCount
-    ? `${cardCount} cards (${variantCount} variants) • ${pendingCount} pending save${pendingCount === 1 ? "" : "s"}`
-    : `${cardCount} cards (${variantCount} variants)`;
+    ? `${cardCount} cards (${ownedCount} of ${totalCount} variants owned) • ${pendingCount} pending save${pendingCount === 1 ? "" : "s"}`
+    : `${cardCount} cards (${ownedCount} of ${totalCount} variants owned)`;
 
   if (!groups.length) {
     results.innerHTML = `<div class="empty-state">No matching cards found.</div>`;
@@ -183,7 +172,6 @@ function render() {
   }
 
   results.innerHTML = groups.map(group => {
-    const ownerSafe = escapeHtml(group.Owner || "");
     const setSafe = escapeHtml(group.Set || "");
     const cardNumberSafe = escapeHtml(String(group.CardNumber || ""));
     const pokemonSafe = escapeHtml(group.Pokemon || "Unknown");
@@ -199,6 +187,10 @@ function render() {
 
       return String(a.Variant).localeCompare(String(b.Variant));
     });
+
+    const ownedInGroup = group.variants.filter(card => card.Owned === true).length;
+    const totalInGroup = group.variants.length;
+    const progressPercent = totalInGroup ? (ownedInGroup / totalInGroup) * 100 : 0;
 
     const variantsHtml = group.variants.map(variantCard => {
       const owned = variantCard.Owned === true;
@@ -225,7 +217,7 @@ function render() {
       return `
         <button
           class="variant-btn ${owned ? "owned" : "missing"} ${isTargetMissing ? "target-missing" : ""} ${isPending ? "pending" : ""}"
-          onclick="queueToggle('${jsEscape(variantCard.Owner)}','${jsEscape(variantCard.Set)}','${jsEscape(String(variantCard.CardNumber))}','${jsEscape(variantCard.Variant)}', ${owned}, ${exists})"
+          onclick="queueToggle('${jsEscape(variantCard.Set)}','${jsEscape(String(variantCard.CardNumber))}','${jsEscape(variantCard.Variant)}')"
         >
           ${escapeHtml(variantCard.Variant || "Unknown")}${isPending ? " •" : ""}
         </button>
@@ -237,35 +229,38 @@ function render() {
         <div class="row-header">
           <div>
             <div class="pokemon-name">${pokemonSafe}</div>
-            <div class="sub">#${cardNumberSafe} • ${setSafe} • ${ownerSafe}</div>
+            <div class="sub">#${cardNumberSafe} • ${setSafe}</div>
           </div>
+          <div class="card-progress-label">${ownedInGroup}/${totalInGroup}</div>
         </div>
+
         <div class="variant-row">${variantsHtml}</div>
+
+        <div class="progress-track">
+          <div class="progress-fill" style="width: ${progressPercent}%"></div>
+        </div>
       </div>
     `;
   }).join("");
 }
 
-function queueToggle(owner, setName, cardNumber, variant, currentOwned, exists) {
-  if (!exists) return;
-
-  const key = makeUpdateKey(owner, setName, cardNumber, variant);
-
+function queueToggle(setName, cardNumber, variant) {
   const match = allCards.find(card =>
-    card.Owner === owner &&
+    card.Owner === OWNER &&
     card.Set === setName &&
     String(card.CardNumber) === String(cardNumber) &&
     card.Variant === variant
   );
 
-  if (!match) return;
+  if (!match || match.Exists === false) return;
 
+  const key = makeUpdateKey(OWNER, setName, cardNumber, variant);
   const newOwned = !match.Owned;
 
   match.Owned = newOwned;
 
   pendingUpdates.set(key, {
-    owner,
+    owner: OWNER,
     setName,
     cardNumber,
     variant,
@@ -415,11 +410,6 @@ function jsEscape(value) {
 }
 
 document.getElementById("searchInput").addEventListener("input", render);
-
-document.getElementById("ownerFilter").addEventListener("change", () => {
-  populateMissingFilter();
-  render();
-});
 
 document.getElementById("setFilter").addEventListener("change", () => {
   populateMissingFilter();
