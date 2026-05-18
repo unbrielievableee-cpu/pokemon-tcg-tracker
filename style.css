@@ -32,7 +32,7 @@ body {
   top: 0;
   z-index: 20;
   display: grid;
-  grid-template-columns: 1.1fr 1.6fr 170px 190px 170px;
+  grid-template-columns: 1.1fr 1.6fr 170px 190px 150px 160px;
   gap: 14px;
   align-items: center;
   padding: 18px 24px;
@@ -74,6 +74,30 @@ input:focus,
 select:focus {
   border-color: rgba(96, 165, 250, 0.65);
   box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.15);
+}
+
+.save-button {
+  width: 100%;
+  padding: 11px 13px;
+  border-radius: 12px;
+  border: 1px solid rgba(34, 197, 94, 0.45);
+  background: rgba(34, 197, 94, 0.18);
+  color: #dcfce7;
+  font-size: 0.9rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: 0.15s ease;
+}
+
+.save-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: rgba(34, 197, 94, 0.28);
+  border-color: rgba(34, 197, 94, 0.75);
+}
+
+.save-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 main {
