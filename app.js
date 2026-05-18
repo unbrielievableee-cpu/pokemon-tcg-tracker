@@ -3,6 +3,7 @@ const API_URL = "https://script.google.com/macros/s/AKfycbx4DKPQ9ykHaTb6AWI92A8I
 const OWNER = "Brie";
 
 let allCards = [];
+let originalOwnedState = new Map();
 let pendingUpdates = new Map();
 let isBatchSaving = false;
 
@@ -29,6 +30,9 @@ async function fetchCards() {
       throw new Error(payload.message || "Invalid read response");
     }
 
+    rebuildOriginalOwnedState();
+    pendingUpdates.clear();
+
     populateSetFilter();
     populateMissingFilter();
     render();
@@ -38,6 +42,21 @@ async function fetchCards() {
     document.getElementById("results").innerHTML =
       `<div class="empty-state">Could not load card data.</div>`;
   }
+}
+
+function rebuildOriginalOwnedState() {
+  originalOwnedState.clear();
+
+  allCards.forEach(card => {
+    const key = makeUpdateKey(
+      card.Owner,
+      card.Set,
+      card.CardNumber,
+      card.Variant
+    );
+
+    originalOwnedState.set(key, card.Owned === true);
+  });
 }
 
 function populateSetFilter() {
@@ -196,6 +215,7 @@ function render() {
     const variantsHtml = group.variants.map(variantCard => {
       const owned = variantCard.Owned === true;
       const exists = variantCard.Exists !== false;
+
       const key = makeUpdateKey(
         variantCard.Owner,
         variantCard.Set,
@@ -246,6 +266,8 @@ function render() {
 }
 
 function queueToggle(setName, cardNumber, variant) {
+  if (isBatchSaving) return;
+
   const match = allCards.find(card =>
     card.Owner === OWNER &&
     card.Set === setName &&
@@ -253,20 +275,25 @@ function queueToggle(setName, cardNumber, variant) {
     card.Variant === variant
   );
 
-  if (!match || match.Exists === false || isBatchSaving) return;
+  if (!match || match.Exists === false) return;
 
   const key = makeUpdateKey(OWNER, setName, cardNumber, variant);
-  const newOwned = !match.Owned;
+  const originalOwned = originalOwnedState.get(key) === true;
+  const newOwned = !(match.Owned === true);
 
   match.Owned = newOwned;
 
-  pendingUpdates.set(key, {
-    owner: OWNER,
-    setName,
-    cardNumber,
-    variant,
-    owned: newOwned
-  });
+  if (newOwned === originalOwned) {
+    pendingUpdates.delete(key);
+  } else {
+    pendingUpdates.set(key, {
+      owner: OWNER,
+      setName,
+      cardNumber,
+      variant,
+      owned: newOwned
+    });
+  }
 
   render();
 }
@@ -298,11 +325,21 @@ async function savePendingUpdates() {
       throw new Error(result.message || "Batch update failed");
     }
 
+    updates.forEach(update => {
+      const key = makeUpdateKey(
+        update.owner,
+        update.setName,
+        update.cardNumber,
+        update.variant
+      );
+
+      originalOwnedState.set(key, update.owned === true);
+    });
+
     pendingUpdates.clear();
 
     status.textContent = result.message || "Changes saved";
-
-    await fetchCards();
+    render();
   } catch (error) {
     console.error(error);
     status.textContent = `Save failed: ${error.message}`;
