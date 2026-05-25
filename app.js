@@ -147,8 +147,13 @@ function render() {
         Set: card.Set,
         CardNumber: card.CardNumber,
         Pokemon: card.Pokemon,
+        ImageURL: card.ImageURL || "",
         variants: []
       };
+    }
+
+    if (!grouped[key].ImageURL && card.ImageURL) {
+      grouped[key].ImageURL = card.ImageURL;
     }
 
     grouped[key].variants.push(card);
@@ -195,6 +200,7 @@ function render() {
     const setSafe = escapeHtml(group.Set || "");
     const cardNumberSafe = escapeHtml(String(group.CardNumber || ""));
     const pokemonSafe = escapeHtml(group.Pokemon || "Unknown");
+    const imageSafe = escapeHtml(group.ImageURL || "");
     const variantOrder = getVariantOrderForSet(group.Set);
 
     group.variants.sort((a, b) => {
@@ -211,6 +217,23 @@ function render() {
     const ownedInGroup = group.variants.filter(card => card.Owned === true).length;
     const totalInGroup = group.variants.length;
     const progressPercent = totalInGroup ? (ownedInGroup / totalInGroup) * 100 : 0;
+
+    const imageHtml = imageSafe
+      ? `
+        <button class="card-image-button" onclick="openImageModal('${jsEscape(group.ImageURL)}','${jsEscape(group.Pokemon)}')">
+          <img
+            class="card-image"
+            src="${imageSafe}"
+            alt="${pokemonSafe} card image"
+            loading="lazy"
+          />
+        </button>
+      `
+      : `
+        <div class="card-image-placeholder">
+          No image
+        </div>
+      `;
 
     const variantsHtml = group.variants.map(variantCard => {
       const owned = variantCard.Owned === true;
@@ -246,16 +269,22 @@ function render() {
     }).join("");
 
     return `
-      <div class="row-card">
-        <div class="row-header">
-          <div>
-            <div class="pokemon-name">${pokemonSafe}</div>
-            <div class="sub">#${cardNumberSafe} • ${setSafe}</div>
-          </div>
-          <div class="card-progress-label">${ownedInGroup}/${totalInGroup}</div>
+      <div class="row-card image-layout">
+        <div class="image-column">
+          ${imageHtml}
         </div>
 
-        <div class="variant-row">${variantsHtml}</div>
+        <div class="card-content">
+          <div class="row-header">
+            <div>
+              <div class="pokemon-name">${pokemonSafe}</div>
+              <div class="sub">#${cardNumberSafe} • ${setSafe}</div>
+            </div>
+            <div class="card-progress-label">${ownedInGroup}/${totalInGroup}</div>
+          </div>
+
+          <div class="variant-row">${variantsHtml}</div>
+        </div>
 
         <div class="progress-track">
           <div class="progress-fill" style="width: ${progressPercent}%"></div>
@@ -372,6 +401,29 @@ function updateSaveButton() {
   saveButton.textContent = `Save ${count} Change${count === 1 ? "" : "s"}`;
 }
 
+function openImageModal(imageUrl, pokemonName) {
+  const existing = document.getElementById("imageModal");
+  if (existing) existing.remove();
+
+  const modal = document.createElement("div");
+  modal.id = "imageModal";
+  modal.className = "image-modal";
+  modal.innerHTML = `
+    <div class="image-modal-backdrop" onclick="closeImageModal()"></div>
+    <div class="image-modal-content">
+      <button class="image-modal-close" onclick="closeImageModal()">×</button>
+      <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(pokemonName)} card image" />
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+}
+
+function closeImageModal() {
+  const modal = document.getElementById("imageModal");
+  if (modal) modal.remove();
+}
+
 function getVariantOrderForSet(setName) {
   const set = String(setName || "").toLowerCase();
 
@@ -467,5 +519,11 @@ document.getElementById("setFilter").addEventListener("change", () => {
 document.getElementById("missingFilter").addEventListener("change", render);
 document.getElementById("sortSelect").addEventListener("change", render);
 document.getElementById("saveButton").addEventListener("click", savePendingUpdates);
+
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape") {
+    closeImageModal();
+  }
+});
 
 fetchCards();
