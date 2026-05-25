@@ -314,7 +314,7 @@ function updateCollectionProgress() {
   const owned = progressCards.filter(card => card.Owned === true).length;
   const total = progressCards.length;
   const percent = total ? (owned / total) * 100 : 0;
-  const roundedPercent = Math.round(percent * 10) / 10;
+  const roundedPercent = percent.toFixed(2);
 
   progressTitle.textContent = setName === "All"
     ? "All Sets Progress"
