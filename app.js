@@ -119,6 +119,8 @@ function render() {
   const missingFilter = document.getElementById("missingFilter").value;
   const sortMode = document.getElementById("sortSelect").value;
 
+  updateCollectionProgress();
+
   const isNumberSearch = /^\d+$/.test(search);
 
   const visibleCards = allCards.filter(card => {
@@ -292,6 +294,35 @@ function render() {
       </div>
     `;
   }).join("");
+}
+
+function updateCollectionProgress() {
+  const setName = document.getElementById("setFilter").value;
+
+  const progressTitle = document.getElementById("progressTitle");
+  const progressSubtitle = document.getElementById("progressSubtitle");
+  const progressPercent = document.getElementById("progressPercent");
+  const progressFill = document.getElementById("collectionProgressFill");
+
+  const progressCards = allCards.filter(card => {
+    return (
+      card.Exists !== false &&
+      (setName === "All" || card.Set === setName)
+    );
+  });
+
+  const owned = progressCards.filter(card => card.Owned === true).length;
+  const total = progressCards.length;
+  const percent = total ? (owned / total) * 100 : 0;
+  const roundedPercent = Math.round(percent * 10) / 10;
+
+  progressTitle.textContent = setName === "All"
+    ? "All Sets Progress"
+    : `${setName} Progress`;
+
+  progressSubtitle.textContent = `${owned} of ${total} variants owned`;
+  progressPercent.textContent = `${roundedPercent}%`;
+  progressFill.style.width = `${percent}%`;
 }
 
 function queueToggle(setName, cardNumber, variant) {
