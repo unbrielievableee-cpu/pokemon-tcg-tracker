@@ -101,7 +101,7 @@ select:focus {
 }
 
 main {
-  max-width: 1040px;
+  max-width: 1120px;
   margin: 0 auto;
   padding: 22px 20px 40px;
 }
@@ -132,6 +132,61 @@ main {
 .row-card:hover {
   background: var(--panel-hover);
   border-color: var(--border-strong);
+}
+
+.row-card.image-layout {
+  display: grid;
+  grid-template-columns: 74px 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+.image-column {
+  width: 74px;
+}
+
+.card-image-button {
+  width: 74px;
+  height: 104px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: rgba(15, 23, 42, 0.88);
+  cursor: pointer;
+  overflow: hidden;
+  transition: 0.15s ease;
+}
+
+.card-image-button:hover {
+  transform: translateY(-1px) scale(1.02);
+  border-color: rgba(96, 165, 250, 0.7);
+}
+
+.card-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.card-image-placeholder {
+  width: 74px;
+  height: 104px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border-radius: 9px;
+  border: 1px dashed var(--border);
+  background: rgba(15, 23, 42, 0.8);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.card-content {
+  min-width: 0;
 }
 
 .row-header {
@@ -241,6 +296,53 @@ main {
   font-weight: 650;
 }
 
+.image-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.image-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.82);
+  backdrop-filter: blur(8px);
+}
+
+.image-modal-content {
+  position: relative;
+  z-index: 101;
+  max-width: min(420px, 90vw);
+  max-height: 90vh;
+}
+
+.image-modal-content img {
+  width: 100%;
+  max-height: 88vh;
+  object-fit: contain;
+  border-radius: 18px;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.55);
+}
+
+.image-modal-close {
+  position: absolute;
+  top: -14px;
+  right: -14px;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(15, 23, 42, 0.95);
+  color: var(--text);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+
 @media (max-width: 1100px) {
   .topbar {
     grid-template-columns: 1fr;
@@ -248,5 +350,27 @@ main {
 
   main {
     max-width: none;
+  }
+}
+
+@media (max-width: 620px) {
+  .row-card.image-layout {
+    grid-template-columns: 56px 1fr;
+    gap: 10px;
+  }
+
+  .image-column,
+  .card-image-button,
+  .card-image-placeholder {
+    width: 56px;
+  }
+
+  .card-image-button,
+  .card-image-placeholder {
+    height: 78px;
+  }
+
+  .pokemon-name {
+    font-size: 15px;
   }
 }
